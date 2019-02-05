@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # source the ciop functions (e.g. ciop-log, ciop-getparam)
-source ${ciop_job_include}
+#source ${ciop_job_include}
 
 # set the environment variables to use ORFEO toolbox
-source $_CIOP_APPLICATION_PATH/otb/otb_include.sh
+#source $CTEP_OUTPUT_DIR/otb/otb_include.sh
 
 # set the environment variables to use ESA SNAP toolbox
 #export SNAP_HOME=$_CIOP_APPLICATION_PATH/common/snap
 #export PATH=${SNAP_HOME}/bin:${PATH}
-source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
+#source $CTEP_OUTPUT_DIR/gpt/snap_include.sh
 
 ## put /opt/anaconda/bin ahead to the PATH list to ensure gdal to point to the anaconda installation dir
 #export PATH=/opt/anaconda/bin:${PATH}
-export PATH=/home/rssuser/.conda/envs/csw/bin:${PATH}
+#export PATH=/home/rssuser/.conda/envs/csw/bin:${PATH}
 
 # define the exit codes
 SUCCESS=0
@@ -39,6 +39,16 @@ ERR_CALIB=19
 ERR_CONVERT=20
 ERR_GETTILENUM=21
 
+
+function ciop-log ()
+{
+	local MSG_TYPE=$1
+	local MSG=$2
+	echo "[${MSG_TYPE}] - ${MSG}"
+	echo "[${MSG_TYPE}] - ${MSG}" >>$LOGFILE
+
+	return 0
+}
 
 # add a trap to exit gracefully
 function cleanExit ()
@@ -136,7 +146,8 @@ function check_product_type() {
       prodTypeName=""
       #Extract metadata file from Landsat
       filename="${retrievedProduct##*/}"; ext="${filename#*.}"
-      if [[ "$ext" == "tar.bz" || "$ext" == "tar" ]]; then
+      if [[ "$ext" == "tar.bz" || "$ext" == "tar" || "$ext" == "tgz" ]]; then
+          ciop-log "INFO" "Product is zipped. Unzipping..."
           #tar xf $retrievedProduct ${filename%%.*}_MTL.txt
           mtdfile="$( tar xf $retrievedProduct -v --wildcards "*_MTL.txt")"
           returnCode=$?
@@ -670,7 +681,7 @@ local geotiffProd=$1
 local outputfile=${TMPDIR}/$(basename ${geotiffProd})
 
 check_packed=$(gdalinfo $geotiffProd | grep COMPRESSION=LZW)
-if [ $check_packed == "COMPRESSION=LZW" ]; then
+if [[ $check_packed == "COMPRESSION=LZW" ]]; then
     ciop-log "INFO" "Unpacking GeoTiff file"
     gdal_translate ${geotiffProd} ${outputfile} -of GTiff
     [ $? -eq 0 ] || return $ERR_GDAL
@@ -810,7 +821,7 @@ fi
 #sets the output filename
 snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
 
-SNAP_gpt_template="$_CIOP_APPLICATION_PATH/pre_processing/templates/snap_request_s1.xml"
+SNAP_gpt_template="$MAIN_DIR/pre_processing/templates/snap_request_s1.xml"
 
 sed -e "s|%%prodname%%|${prodname}|g" \
 -e "s|%%commentMlBegin%%|${commentMlBegin}|g" \
@@ -932,7 +943,7 @@ pixelSpacing=$(echo "scale=1; $srcPixelSpacing*$ml_factor" | bc )
 #sets the output filename
 snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
 
-SNAP_gpt_template="$_CIOP_APPLICATION_PATH/pre_processing/templates/snap_request_rs2.xml"
+SNAP_gpt_template="$MAIN_DIR/pre_processing/templates/snap_request_rs2.xml"
 
 sed -e "s|%%prodname%%|${prodname}|g" \
 -e "s|%%commentMlBegin%%|${commentMlBegin}|g" \
@@ -1049,22 +1060,25 @@ local pixelSpacingMaster=$3
 local performCropping=$4
 local subsettingBoxWKT=$5
 
-unzippedFolder=$(ls $retrievedProduct)
+#unzippedFolder=$(ls $retrievedProduct)
 # log the value, it helps debugging.
 # the log entry is available in the process stderr
-ciop-log "DEBUG" "unzippedFolder: ${unzippedFolder}"
+#ciop-log "DEBUG" "unzippedFolder: ${unzippedFolder}"
 # retrieved product pointing to the unzipped folder
-prodname=$retrievedProduct/$unzippedFolder
+#prodname=$retrievedProduct/$unzippedFolder
+#prodname=$retrievedProduct
 
 #get full path of S2 product metadata xml file
 # check if it is like S2?_*.xml
 # s2_xml=$(ls "${retrievedProduct}"/S2?_*.xml )
+
 s2_xml=$(find ${prodname}/ -name '*.xml' | egrep '^.*/S2[A-Z]?_.*.SAFE/S2[A-Z]?_[A-Z0-9]*.xml$')
 # if it not like S2?_*.xml
 if [ $? -ne 0 ] ; then
     # check if it is like MTD_*.xml
-    #s2_xml=$(ls "${retrievedProduct}"/MTD_*.xml )
-    s2_xml=$(find ${prodname}/ -name '*.xml' | egrep '^.*/S2[A-Z]?_.*.SAFE/MTD_[A-Z0-9]*.xml$')
+#    s2_xml=$(ls "${prodname}"/MTD_*.xml )
+    s2_xml=$(find ${prodname}/ -name 'MTD_M*.xml')
+#    s2_xml=$(find ${prodname}/ -name '*.xml' | egrep '^.*/S2[A-Z]?_.*.SAFE/MTD_[A-Z0-9]*.xml$')
     #if it is neither like MTD_*.xml: return error
     [ $? -ne 0 ] && return $ERR_GETPRODMTD
 fi
@@ -1087,16 +1101,18 @@ SNAP_REQUEST=$( create_snap_request_rsmpl_rprj_sbs "${s2_xml}" "${performResampl
 [ $DEBUG -eq 1 ] && cat ${SNAP_REQUEST}
 # report activity in the log
 ciop-log "INFO" "Generated request file: ${SNAP_REQUEST}"
-
 # report activity in the log
 ciop-log "INFO" "Invoking SNAP-gpt on the generated request file for Sentinel 2 data pre processing"
 
 # invoke the ESA SNAP toolbox
-gpt $SNAP_REQUEST -c "${CACHE_SIZE}" &> /dev/null
+/opt/snap/bin/gpt $SNAP_REQUEST -c 4096M #&> /dev/null
 # check the exit code
 [ $? -eq 0 ] || return $ERR_SNAP
 
 # create a tar archive where DIM output product is stored and put it in OUTPUT dir
+ciop-log "INFO" "ls: $( ls )"
+ciop-log "INFO" "pwd: $( pwd )"
+ciop-log "INFO" "Create a tar archive where DIM output product is stored and put it in OUTPUT dir"
 cd ${TMPDIR}
 tar -cf ${outProdBasename}.tar ${outProdBasename}.d*
 #tar -cjf ${outProdBasename}.tar -C ${TMPDIR} .
@@ -1805,7 +1821,7 @@ if [ ${mission} = "Landsat-8" ]; then
     #Check if downloaded product is compressed and extract it
     ext="${prodname##*/}"; ext="${ext#*.}"
     ciop-log "INFO" "Product extension is: $ext"
-    if [ "$ext" == "tar.bz" ] || [ "$ext" == "tar" ]; then
+    if [[ "$ext" == "tar.bz" || "$ext" == "tar" || "$ext" == "tgz" ]]; then
         ciop-log "INFO" "Extracting $prodname"
         currentBasename=$(basename $prodname)
         currentBasename="${currentBasename%%.*}"
@@ -1824,8 +1840,12 @@ if [ ${mission} = "Landsat-8" ]; then
         ls "${prodname}"/LS08*_B[0-1][0-7,9]${ext} > $tifList
     fi
     cd -
-    if [[ "${performOpticalCalibration}" = true ]]; then
-        ciop-log "INFO" "Calibration for Landsat8 not yet available"
+    if [[ "${performOpticalCalibration}" = True ]]; then
+#        ciop-log "INFO" "Calibration for Landsat8 not yet available"
+        ciop-log "INFO" "Performing radiometric calibration for $prodname"
+        python "${MAIN_DIR}L8_reflectance.py $prodname $(dirname $prodname)"
+        returnCode=$?
+        [ $returnCode -eq 0 ] || return ${ERR_CALIB}
 #        metadatafile=$(ls ${prodname}/*_MTL.txt)
 #        outputfile=${prodname}_
 #        rio toa reflectance $(cat "${tifList}") ${metadatafile} ${outputfile}
@@ -2144,7 +2164,7 @@ fi
 
 #sets the output filename
 snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
-SNAP_gpt_template="$_CIOP_APPLICATION_PATH/pre_processing/templates/snap_request_linear_to_dB.xml"
+SNAP_gpt_template="$MAIN_DIR/pre_processing/templates/snap_request_linear_to_dB.xml"
 
 sed -e "s|%%inputfile%%|${inputfile}|g" \
 -e "s|%%outputfile%%|${outputfile}|g" \
@@ -2176,7 +2196,7 @@ function create_snap_request_stack(){
 
     #sets the output filename
     snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
-    SNAP_gpt_template="$_CIOP_APPLICATION_PATH/pre_processing/templates/snap_request_stack.xml"
+    SNAP_gpt_template="$MAIN_DIR/pre_processing/templates/snap_request_stack.xml"
 
     sed -e "s|%%inputfiles_list%%|${inputfiles_list}|g" \
     -e "s|%%numProd%%|${numProd}|g" \
@@ -2337,71 +2357,58 @@ return 0
 
 function create_snap_request_rsmpl_rprj_sbs() {
 
-# function call create_snap_request_rsmpl_rprj_sbs "${prodname}" "${performResample}" "${target_spacing}" "${performCropping}" "${subsettingBoxWKT}" "${sourceBandsList}" "${outProd}"
+    # function call create_snap_request_rsmpl_rprj_sbs "${prodname}" "${performResample}" "${target_spacing}" "${performCropping}" "${subsettingBoxWKT}" "${sourceBandsList}" "${outProd}"
 
-# function which creates the actual request from
-# a template and returns the path to the request
+    # function which creates the actual request from
+    # a template and returns the path to the request
 
-inputNum=$#
-[ "$inputNum" -ne 7 ] && return ${ERR_PREPROCESS}
+    inputNum=$#
+    [ "$inputNum" -ne 7 ] && return ${ERR_PREPROCESS}
 
-local prodname=$1
-local performResample=$2
-local target_spacing=$3
-local performCropping=$4
-local subsettingBoxWKT=$5
-local sourceBandsList=$6
-local outprod=$7
+    local prodname=$1
+    local performResample=$2
+    local target_spacing=$3
+    local performCropping=$4
+    local subsettingBoxWKT=$5
+    local sourceBandsList=$6
+    local outprod=$7
 
-local commentRsmpBegin=""
-local commentRsmpEnd=""
-local commentReadSrcBegin=""
-local commentReadSrcEnd=""
-local commentSbsBegin=""
-local commentSbsEnd=""
-local commentMlBegin=""
-local commentMlEnd=""
-local commentProjSrcBegin=""
-local commentProjSrcEnd=""
+    local commentRsmpBegin=""
+    local commentRsmpEnd=""
+    local commentReadSrcBegin=""
+    local commentReadSrcEnd=""
+    local commentSbsBegin=""
+    local commentSbsEnd=""
+    local commentMlBegin=""
+    local commentMlEnd=""
+    local commentProjSrcBegin=""
+    local commentProjSrcEnd=""
 
-local beginCommentXML="<!--"
-local endCommentXML="-->"
+    local beginCommentXML="<!--"
+    local endCommentXML="-->"
 
-# check for resampling operator usage
-if [ "${performResample}" = false ] ; then
-    commentRsmpBegin="${beginCommentXML}"
-    commentRsmpEnd="${endCommentXML}"
-else
-    commentReadSrcBegin="${beginCommentXML}"
-    commentReadSrcEnd="${endCommentXML}"
-fi
-# check for subset operator usage
-if [ "${performCropping}" = false ] ; then
-    commentSbsBegin="${beginCommentXML}"
-    commentSbsEnd="${endCommentXML}"
-else
-    commentProjSrcBegin="${beginCommentXML}"
-    commentProjSrcEnd="${endCommentXML}"
-fi
+    # check for resampling operator usage
+    if [ "${performResample}" = False ] ; then
+        commentRsmpBegin="${beginCommentXML}"
+        commentRsmpEnd="${endCommentXML}"
+    else
+        commentReadSrcBegin="${beginCommentXML}"
+        commentReadSrcEnd="${endCommentXML}"
+    fi
+    # check for subset operator usage
+    if [ "${performCropping}" = False ] ; then
+        commentSbsBegin="${beginCommentXML}"
+        commentSbsEnd="${endCommentXML}"
+    else
+        commentProjSrcBegin="${beginCommentXML}"
+        commentProjSrcEnd="${endCommentXML}"
+    fi
 
-#sets the output filename
-snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
-SNAP_gpt_template="$_CIOP_APPLICATION_PATH/pre_processing/templates/snap_request_rsmpl_rprj_sbs.xml"
+    #sets the output filename
+    snap_request_filename="${TMPDIR}/$( uuidgen ).xml"
 
-sed -e "s|%%prodname%%|${prodname}|g" \
--e "s|%%commentRsmpBegin%%|${commentRsmpBegin}|g" \
--e "s|%%target_spacing%%|${target_spacing}|g" \
--e "s|%%commentRsmpEnd%%|${commentRsmpEnd}|g" \
--e "s|%%commentReadSrcBegin%%|${commentReadSrcBegin}|g" \
--e "s|%%commentReadSrcEnd%%|${commentReadSrcEnd}|g" \
--e "s|%%commentSbsBegin%%|${commentSbsBegin}|g" \
--e "s|%%subsettingBoxWKT%%|${subsettingBoxWKT}|g" \
--e "s|%%commentSbsEnd%%|${commentSbsEnd}|g" \
--e "s|%%commentProjSrcBegin%%|${commentProjSrcBegin}|g" \
--e "s|%%commentProjSrcEnd%%|${commentProjSrcEnd}|g" \
--e "s|%%sourceBandsList%%|${sourceBandsList}|g" \
--e "s|%%outprod%%|${outprod}|g"  $SNAP_gpt_template > $snap_request_filename
-
+    SNAP_gpt_template="$MAIN_DIR/pre_processing/templates/snap_request_rsmpl_rprj_sbs.xml"
+    sed -e "s|%%prodname%%|${prodname}|g" -e "s|%%commentRsmpBegin%%|${commentRsmpBegin}|g" -e "s|%%target_spacing%%|${target_spacing}|g" -e "s|%%commentRsmpEnd%%|${commentRsmpEnd}|g" -e "s|%%commentReadSrcBegin%%|${commentReadSrcBegin}|g" -e "s|%%commentReadSrcEnd%%|${commentReadSrcEnd}|g" -e "s|%%commentSbsBegin%%|${commentSbsBegin}|g" -e "s|%%subsettingBoxWKT%%|${subsettingBoxWKT}|g" -e "s|%%commentSbsEnd%%|${commentSbsEnd}|g" -e "s|%%commentProjSrcBegin%%|${commentProjSrcBegin}|g" -e "s|%%commentProjSrcEnd%%|${commentProjSrcEnd}|g" -e "s|%%sourceBandsList%%|${sourceBandsList}|g" -e "s|%%outprod%%|${outprod}|g" $SNAP_gpt_template > $snap_request_filename
     [ $? -eq 0 ] && {
         echo "${snap_request_filename}"
         return 0
@@ -2412,18 +2419,20 @@ function main() {
 
     #get input product list and convert it into an array
     # It should contain only the Master product
-    local -a inputfiles=($@)
+#    local -a inputfiles=($@)
     #get the number of products to be processed
-    inputfilesNum=$#
+#    inputfilesNum=$#
     # check if number of products is 1 (only master)
-    [ "$inputfilesNum" -ne "1" ] && exit $ERR_WRONGINPUTNUM
-    local master=${inputfiles[0]}
+#    [ "$inputfilesNum" -ne "1" ] && exit $ERR_WRONGINPUTNUM
+#    local master=${inputfiles[0]}
+    local master=$1
     # log the value, it helps debugging.
     # the log entry is available in the process stderr
     ciop-log "DEBUG" "Master product reference provided at input: ${master}"
 
     #get input slave(s) product
-    local slave="`ciop-getparam slave`"
+#    local slave="`ciop-getparam slave`"
+    local slave=$2
     # run a check on the slave value, it can't be empty
     [ -z "$slave" ] && exit $ERR_NOPROD
     # log the value, it helps debugging.
@@ -2439,19 +2448,22 @@ function main() {
     [ "$slavesNum" -lt "1" ] && exit $ERR_WRONGINPUTNUM
 
     # retrieve the parameters value from workflow or job default value
-    performOpticalCalibration="`ciop-getparam performOpticalCalibration`"
+#    performOpticalCalibration="`ciop-getparam performOpticalCalibration`"
+    performOpticalCalibration=$3
     # log the value, it helps debugging.
     # the log entry is available in the process stderr
     ciop-log "DEBUG" "The performOpticalCalibration flag is set to ${performOpticalCalibration}"
 
     # retrieve the parameters value from workflow or job default value
-    performCropping="`ciop-getparam performCropping`"
+#    performCropping="`ciop-getparam performCropping`"
+    performCropping=$4
     # log the value, it helps debugging.
     # the log entry is available in the process stderr
     ciop-log "DEBUG" "The performCropping flag is set to ${performCropping}"
 
     # retrieve the parameters value from workflow or job default value
-    SubsetBoundingBox="`ciop-getparam SubsetBoundingBox`"
+#    SubsetBoundingBox="`ciop-getparam SubsetBoundingBox`"
+    SubsetBoundingBox=$5
     # log the value, it helps debugging.
     # the log entry is available in the process stderr
     ciop-log "DEBUG" "The selected subset bounding box data is: ${SubsetBoundingBox}"
@@ -2483,37 +2495,52 @@ function main() {
     for prodIndex in `seq 0 $slavesNum`;
     do
         ### GET CURRENT DATA PRODUCT
-
-	# declare local master
-	local isMaster=""
-	# Master case
-	if [ $prodIndex -eq 0  ] ; then
-	    #current product
+        # declare local master
+        local isMaster=""
+        # Master case
+	    if [ $prodIndex -eq 0  ] ; then
+	        #current product
             currentProduct=${master}
+            dirname="master"
             # master flag
-	    isMaster=1
+	        isMaster=1
         else
-	    let "tmpIndex=prodIndex-1"
-	    #current product
+	        let "tmpIndex=prodIndex-1"
+	        #current product
             currentProduct=${inputSlaveList[$tmpIndex]}
-	    # master flag
+            dirname="slave"
+	        # master flag
             isMaster=0
         fi
+        currentProductNameDebug=$( basename "${currentProduct}" )
         # run a check on the value, it can't be empty
         [ -z "$currentProduct" ] && exit $ERR_NOPROD
         # log the value, it helps debugging.
         # the log entry is available in the process stderr
         ciop-log "DEBUG" "The product reference to be used is: ${currentProduct}"
-        # report product retrieving activity in log
-        ciop-log "INFO" "Retrieving ${currentProduct}"
         # retrieve product to the local temporary folder TMPDIR provided by the framework (this folder is only used by this process)
         # the utility returns the local path of the retrieved product
-        retrievedProduct=$( get_data "${currentProduct}" "${TMPDIR}" )
-        if [ $? -ne 0  ] ; then
-            cat ${TMPDIR}/ciop_copy.stderr
-            return $ERR_NORETRIEVEDPROD
-        fi
-
+        # report product retrieving activity in log
+        ciop-log "INFO" "Retrieving ${currentProduct}"
+        # retrieve the MASTER product to the local temporary folder TMPDIR provided by the framework (this folder is only used by this process)
+        # the utility returns the local path so the variable $retrievedMaster contains the local path to the MASTER product
+        #list_input=$( ls -l "${TMPDIR}" )
+        #ciop-log "INFO" "List of files into ${list_input} are: ${list_input}"
+        TMPDIR_M="${TMPDIR}/${dirname}"
+        mkdir -p $TMPDIR_M
+        ciop-log "INFO" "Linking product in ${TMPDIR}/${dirname}/${currentProductNameDebug}"
+        #ln -fs $master ${TMPDIR_M}/${masterNameDebug}
+        #cp -R $master ${TMPDIR_M}
+#        mv "$currentProduct" "${TMPDIR_M}"
+        cp -r "$currentProduct" "${TMPDIR_M}"
+        retrievedProduct="${TMPDIR_M}/${currentProductNameDebug}"
+#        if [[ -d "$retrievedProduct" ]]; then
+#            retrievedProduct=$(find ${retrievedProduct} -name 'manifest.safe')
+#            if [ $? -ne 0  ] ; then
+#    #            cat ${TMPDIR}/ciop_copy.stderr
+#                return $ERR_NORETRIEVEDPROD
+#            fi
+#        fi
         prodname=$( basename "$retrievedProduct" )
         # report activity in the log
         ciop-log "INFO" "Product correctly retrieved: ${prodname}"
@@ -2540,24 +2567,24 @@ function main() {
         # the log entry is available in the process stderr
         ciop-log "INFO" "Retrieved product type: ${prodType}"
 
-	### GET PIXEL SPACING FROM MISSION IDENTIFIER OF MASTER PRODUCT
+	    ### GET PIXEL SPACING FROM MISSION IDENTIFIER OF MASTER PRODUCT
 
-	# report activity in the log
-	ciop-log "INFO" "Getting pixel spacing from mission identifier"
+	    # report activity in the log
+	    ciop-log "INFO" "Getting pixel spacing from mission identifier"
         #get pixel spacing from mission identifier
         pixelSpacing=$( get_pixel_spacing "${mission}" "${prodname}" "${prodType}")
         returnCode=$?
         [ $returnCode -eq 0 ] || return $returnCode
         if [ $isMaster -eq 1 ] ; then
-	   pixelSpacingMaster=$pixelSpacing
-	   # log the value, it helps debugging.
+	       pixelSpacingMaster=$pixelSpacing
+	       # log the value, it helps debugging.
            # the log entry is available in the process stderr
            ciop-log "INFO" "Master pixel spacing: ${pixelSpacingMaster} m"
-	else
-	   # log the value, it helps debugging.
+	    else
+	       # log the value, it helps debugging.
            # the log entry is available in the process stderr
            ciop-log "INFO" "Slave pixel spacing: ${pixelSpacing} m"
-	fi
+	    fi
 
         ### PRE-PROCESSING DEPENDING ON MISSION DATA
         # report activity in the log
@@ -2574,9 +2601,9 @@ function main() {
 	    out_prodname=$( ls "${OUTPUTDIR}"/*.tar )
             mv ${out_prodname} ${out_prodname}.master
 	fi
-	ciop-publish ${OUTPUTDIR}/*.*
+#	ciop-publish ${OUTPUTDIR}/*.*
         #cleanup
-        rm -rf ${retrievedProduct} ${OUTPUTDIR}/*.*
+#        rm -rf ${retrievedProduct} ${OUTPUTDIR}/*.*
     done
 
     #cleanup
@@ -2586,19 +2613,65 @@ function main() {
 }
 
 # create the output folder to store the output products and export it
-mkdir -p ${TMPDIR}/output
-export OUTPUTDIR=${TMPDIR}/output
+#mkdir -p ${TMPDIR}/output
+#export OUTPUTDIR=${TMPDIR}/output
 # debug flag setting
-export DEBUG=0
+#export DEBUG=0
 
 # loop on input file to create a product array that will be processed by the main process
-declare -a inputfiles
-while read inputfile; do
-    inputfiles+=("${inputfile}") # Array append
-done
+#declare -a inputfiles
+#while read inputfile; do
+#    inputfiles+=("${inputfile}") # Array append
+#done
 # run main process
-main ${inputfiles[@]}
-res=$?
-[ ${res} -ne 0 ] && exit ${res}
+#main ${inputfiles[@]}
+#res=$?
+#[ ${res} -ne 0 ] && exit ${res}
 
-exit $SUCCESS
+#exit $SUCCESS
+
+
+# Execute main
+export DEBUG=0
+
+LOGFILE=$1
+
+starting_time=$(echo "$(date) $line")
+
+SCRIPT_FILENAME=$0
+ciop-log "INFO" "Run of $SCRIPT_FILENAME starts at $starting_time"
+
+# Main directory is passed as first argument
+MAIN_DIR=$2
+ciop-log "DEBUG" "Main directory is : $MAIN_DIR"
+if [[ ! -e "$MAIN_DIR" ]]; then
+	ciop-log "ERROR" "Main directory $MAIN_DIR not found. Aborting."
+	exit 1
+fi
+
+# Temp directory
+TMPDIR=$3
+ciop-log "DEBUG" "Temp directory is : $TMPDIR"
+if [[ ! -e "$TMPDIR" ]]; then
+	ciop-log "ERROR" "Temp directory $TMPDIR not found. Aborting."
+	exit 1
+fi
+
+# Output directory
+export OUTPUTDIR=$4
+ciop-log "DEBUG" "Output directory is : $OUTPUTDIR"
+if [[ ! -e "$OUTPUTDIR" ]]; then
+	ciop-log "ERROR" "Output directory $OUTPUTDIR not found. Aborting."
+	exit 1
+fi
+
+# set the environment variables to use ESA SNAP toolbox
+source ${MAIN_DIR}/gpt/snap_include.sh
+#source ${MAIN_DIR}/gpt/snap_include.sh
+
+main $5 $6 $7 $8 $9
+
+res=$?
+[ $res -eq 0 ] || exit $res
+ending_time=$(echo "$(date) $line")
+ciop-log "INFO" "Run of $SCRIPT_FILENAME ends at: $ending_time"

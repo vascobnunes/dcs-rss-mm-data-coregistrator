@@ -43,3 +43,10 @@ target
 .idea/misc.xml
 .idea/modules.xml
 .idea/workspace.xml
+src/main/app-resources/pre_processing/run_dev.sh
+pom.xml.bk2
+pom.xml.trial
+Missions_status.xlsx
+~$Missions_status.xlsx
+coreg_help.sh
+coreg_status13122018.png

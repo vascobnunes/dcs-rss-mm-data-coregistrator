@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # source the ciop functions (e.g. ciop-log, ciop-getparam)
-source ${ciop_job_include}
+#source ${ciop_job_include}
 
 # set the environment variables to use ESA SNAP toolbox
 #export SNAP_HOME=$_CIOP_APPLICATION_PATH/common/snap
 #export PATH=${SNAP_HOME}/bin:${PATH}
-source $_CIOP_APPLICATION_PATH/gpt/snap_include.sh
 
 # define the exit codes
 SUCCESS=0
@@ -43,7 +42,7 @@ function cleanExit ()
         ${ERR_WRONGPRODTYPE})           msg="Product type not supported";;
         ${ERR_GETPRODMTD})              msg="Error while retrieving metadata file from product";;
         ${ERR_PCONVERT})                msg="PCONVERT failed to process";;
-	${ERR_PROPERTIES_FILE_CREATOR}) msg="Could not create the .properties file";;
+	    ${ERR_PROPERTIES_FILE_CREATOR}) msg="Could not create the .properties file";;
         *)                              msg="Unknown error";;
     esac
 
@@ -338,6 +337,37 @@ function main ()
     return ${SUCCESS}
 }
 
+LOGFILE=$1
+
+starting_time=$(echo "$(date) $line")
+
+SCRIPT_FILENAME=$0
+ciop-log "INFO" "Run of $SCRIPT_FILENAME starts at $starting_time"
+
+# Main directory is passed as first argument
+MAIN_DIR=$2
+ciop-log "DEBUG" "Main directory is : $MAIN_DIR"
+if [[ ! -e "$MAIN_DIR" ]]; then
+	ciop-log "ERROR" "Main directory $MAIN_DIR not found. Aborting."
+	exit 1
+fi
+
+# Temp directory
+TMPDIR=$3
+ciop-log "DEBUG" "Temp directory is : $TMPDIR"
+if [[ ! -e "$TMPDIR" ]]; then
+	ciop-log "ERROR" "Temp directory $TMPDIR not found. Aborting."
+	exit 1
+fi
+
+# Output directory
+export OUTPUTDIR=$4
+ciop-log "DEBUG" "Output directory is : $OUTPUTDIR"
+if [[ ! -e "$OUTPUTDIR" ]]; then
+	ciop-log "ERROR" "Output directory $OUTPUTDIR not found. Aborting."
+	exit 1
+fi
+
 # create the output folder to store the output products and export it
 mkdir -p ${TMPDIR}/output
 export OUTPUTDIR=${TMPDIR}/output
@@ -346,14 +376,21 @@ export INPUTDIR=${TMPDIR}/input
 # debug flag setting
 export DEBUG=0
 
-# loop on input file to create a product array that will be processed by the main process
-declare -a inputfiles
-while read inputfile; do
-    inputfiles+=("${inputfile}") # Array append
-done
-# run main process
-main ${inputfiles[@]}
-res=$?
-[ ${res} -ne 0 ] && exit ${res}
+source ${MAIN_DIR}/gpt/snap_include.sh
 
-exit $SUCCESS 
+# loop on input file to create a product array that will be processed by the main process
+#declare -a inputfiles
+#while read inputfile; do
+#    inputfiles+=("${inputfile}") # Array append
+#done
+# run main process
+#main ${inputfiles[@]}
+#res=$?
+#[ ${res} -ne 0 ] && exit ${res}
+
+#exit $SUCCESS
+
+res=$?
+[ $res -eq 0 ] || exit $res
+ending_time=$(echo "$(date) $line")
+ciop-log "INFO" "Run of $SCRIPT_FILENAME ends at: $ending_time"
