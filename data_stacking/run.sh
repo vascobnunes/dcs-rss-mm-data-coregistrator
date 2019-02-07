@@ -23,6 +23,16 @@ ERR_PCONVERT=11
 ERR_PROPERTIES_FILE_CREATOR=12
 
 
+function ciop-log ()
+{
+	local MSG_TYPE=$1
+	local MSG=$2
+	echo "[${MSG_TYPE}] - ${MSG}"
+	echo "[${MSG_TYPE}] - ${MSG}" >>$LOGFILE
+
+	return 0
+}
+
 # add a trap to exit gracefully
 function cleanExit ()
 {
@@ -190,7 +200,7 @@ function main ()
         # report activity in log
         ciop-log "INFO" "Retrieving ${inputfiles[$index]} from storage"
 
-        retrieved=$( ciop-copy -U -o $TMPDIR "${inputfiles[$index]}" )
+        retrieved=$( cp -r "${inputfiles[$index]}" $TMPDIR)
         # check if the file was retrieved, if not exit with the error code $ERR_NODATA
         [ $? -eq 0 ] && [ -e "${retrieved}" ] || return ${ERR_NODATA}
 
@@ -355,22 +365,22 @@ fi
 # Temp directory
 TMPDIR=$3
 ciop-log "DEBUG" "Temp directory is : $TMPDIR"
-if [[ ! -e "$TMPDIR" ]]; then
-	ciop-log "ERROR" "Temp directory $TMPDIR not found. Aborting."
-	exit 1
-fi
+#if [[ ! -e "$TMPDIR" ]]; then
+#	ciop-log "ERROR" "Temp directory $TMPDIR not found. Aborting."
+#	exit 1
+#fi
 
 # Output directory
 export OUTPUTDIR=$4
 ciop-log "DEBUG" "Output directory is : $OUTPUTDIR"
-if [[ ! -e "$OUTPUTDIR" ]]; then
-	ciop-log "ERROR" "Output directory $OUTPUTDIR not found. Aborting."
-	exit 1
-fi
+#if [[ ! -e "$OUTPUTDIR" ]]; then
+#	ciop-log "ERROR" "Output directory $OUTPUTDIR not found. Aborting."
+#	exit 1
+#fi
 
 # create the output folder to store the output products and export it
 mkdir -p ${TMPDIR}/output
-export OUTPUTDIR=${TMPDIR}/output
+#export OUTPUTDIR=${TMPDIR}/output
 mkdir -p ${TMPDIR}/input
 export INPUTDIR=${TMPDIR}/input
 # debug flag setting
@@ -378,13 +388,15 @@ export DEBUG=0
 
 source ${MAIN_DIR}/gpt/snap_include.sh
 
-# loop on input file to create a product array that will be processed by the main process
-#declare -a inputfiles
-#while read inputfile; do
-#    inputfiles+=("${inputfile}") # Array append
-#done
+ciop-log "DEBUG" "Output directory has : $(ls $OUTPUTDIR)"
+
+#splittedCouple_list=$(find ${OUTPUTDIR}/ -name '*.tar*' |  tr '\n' ' ')
+splittedCouple_list=$(find ${OUTPUTDIR}/ -name '*.tar*')
+ciop-log "DEBUG" "Output directory is : $splittedCouple_list"
+#splittedCouple_list="/tmp/tmpo91bn60t/output/S2A_MSIL1C_20190121T114401_N0207_R123_T30UUG_20190121T120654.SAFE_pre_proc.tar.master /tmp/tmpo91bn60t/output/S2A_MSIL1C_20190121T114401_N0207_R123_T30UUG_20190121T120654.SAFE_pre_proc.tar"
+
 # run main process
-#main ${inputfiles[@]}
+main $splittedCouple_list
 #res=$?
 #[ ${res} -ne 0 ] && exit ${res}
 
