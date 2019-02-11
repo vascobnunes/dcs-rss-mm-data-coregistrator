@@ -200,8 +200,9 @@ function main ()
         # report activity in log
         ciop-log "INFO" "Retrieving ${inputfiles[$index]} from storage"
 
-        retrieved=$( cp -r "${inputfiles[$index]}" $TMPDIR)
+        retrieved=$( cp -r "${inputfiles[$index]}" $TMPDIR | echo $TMPDIR/$(basename ${inputfiles[$index]}))
         # check if the file was retrieved, if not exit with the error code $ERR_NODATA
+#        ciop-log "INFO" "Whats on tmpdir $(ls $TMPDIR)"
         [ $? -eq 0 ] && [ -e "${retrieved}" ] || return ${ERR_NODATA}
 
         # report activity in the log
@@ -333,7 +334,7 @@ function main ()
     cp ${outputTIF_properties} ${OUTPUTDIR}/stack_product.properties
     # publish the coergistered product
     ciop-log "INFO" "Publishing Output Products"
-    ciop-publish -m "${OUTPUTDIR}"/* 
+#    ciop-publish -m "${OUTPUTDIR}"/*
 
     # cleanup
     rm -rf "${INPUTDIR}"/* "${TMPDIR}"/* "${OUTPUTDIR}"/*
@@ -390,9 +391,7 @@ source ${MAIN_DIR}/gpt/snap_include.sh
 
 ciop-log "DEBUG" "Output directory has : $(ls $OUTPUTDIR)"
 
-#splittedCouple_list=$(find ${OUTPUTDIR}/ -name '*.tar*' |  tr '\n' ' ')
 splittedCouple_list=$(find ${OUTPUTDIR}/ -name '*.tar*')
-ciop-log "DEBUG" "Output directory is : $splittedCouple_list"
 #splittedCouple_list="/tmp/tmpo91bn60t/output/S2A_MSIL1C_20190121T114401_N0207_R123_T30UUG_20190121T120654.SAFE_pre_proc.tar.master /tmp/tmpo91bn60t/output/S2A_MSIL1C_20190121T114401_N0207_R123_T30UUG_20190121T120654.SAFE_pre_proc.tar"
 
 # run main process
