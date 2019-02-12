@@ -230,7 +230,7 @@ function main ()
         # NOTE: for each loop step, the TMPDIR is cleansd, so the unique product contained is the current one
         inputDIM=$( ls *.dim)
         # move current dim product to input dir
-	mv *.d* $INPUTDIR
+	mv *.dim $INPUTDIR
         # full path of input dim product after move
 	inputDIM=${INPUTDIR}/${inputDIM}
         cd - &> /dev/null
@@ -333,17 +333,17 @@ function main ()
     ciop-log "DEBUG" "Properties file created: ${outputTIF_properties}"
     cp ${outputTIF_properties} ${OUTPUTDIR}/stack_product.properties
     # publish the coergistered product
-    ciop-log "INFO" "Publishing Output Products"
+#    ciop-log "INFO" "Publishing Output Products"
 #    ciop-publish -m "${OUTPUTDIR}"/*
 
     # cleanup
-    rm -rf "${INPUTDIR}"/* "${TMPDIR}"/* "${OUTPUTDIR}"/*
-    if [ $DEBUG -ne 1 ] ; then
-        for index in `seq 0 $inputfilesNum`;
-        do
-                hadoop dfs -rmr "${inputfiles[$index]}"
-        done
-    fi
+#    rm -rf "${INPUTDIR}"/* "${TMPDIR}"/* "${OUTPUTDIR}"/*
+#    if [ $DEBUG -ne 1 ] ; then
+#        for index in `seq 0 $inputfilesNum`;
+#        do
+#                hadoop dfs -rmr "${inputfiles[$index]}"
+#        done
+#    fi
 
     return ${SUCCESS}
 }
@@ -396,11 +396,8 @@ splittedCouple_list=$(find ${OUTPUTDIR}/ -name '*.tar*')
 
 # run main process
 main $splittedCouple_list
-#res=$?
-#[ ${res} -ne 0 ] && exit ${res}
 
 #exit $SUCCESS
-
 res=$?
 [ $res -eq 0 ] || exit $res
 ending_time=$(echo "$(date) $line")
